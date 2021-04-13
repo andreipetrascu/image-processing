@@ -4,7 +4,6 @@
 #include "stdafx.h"
 #include "common.h"
 #include <iostream>
-//#include "stdio.h"
 #include<random>
 # define M_PI        3.141592653589793238462643383279502884L /* pi */
 
@@ -1604,6 +1603,91 @@ Mat_<uchar> extractContour(Mat_<uchar> src, Mat_<uchar> mask) {
 	return dst;
 }
 
+Mat_<uchar> intersection(Mat_<uchar> m1, Mat_<uchar> m2) {
+	Mat_<uchar> dst(m1.rows, m1.cols);
+
+	for (int i = 0; i < dst.rows; i++)
+		for (int j = 0; j < dst.cols; j++)
+			if (m1(i, j) == m2(i, j))
+				dst(i, j) = m1(i, j);
+			else
+				dst(i, j) = 0; //background color
+
+	return dst;
+}
+
+Mat_<uchar> reunion(Mat_<uchar> m1, Mat_<uchar> m2) {
+	Mat_<uchar> dst(m1.rows, m1.cols);
+
+	for (int i = 0; i < dst.rows; i++)
+		for (int j = 0; j < dst.cols; j++)
+			if (m1(i, j) == 1 || m2(i, j) == 1)
+				dst(i, j) = 1;
+			else
+				dst(i, j) = 0;
+
+	return dst;
+}
+
+Mat_<uchar> complement(Mat_<uchar> img) {
+	Mat_<uchar> dst(img.rows, img.cols);
+
+	for (int i = 0; i < dst.rows; i++)
+		for (int j = 0; j < dst.cols; j++)
+			if (img(i, j) == 1)
+				dst(i, j) = 0;
+			else
+				dst(i, j) = 1;
+	return dst;
+}
+
+bool areEqual(Mat_<uchar> img1, Mat_<uchar> img2) {
+	for (int i = 0; i < img1.rows; i++)
+		for (int j = 0; j < img1.cols; j++)
+			if (img1(i, j) != img2(i, j)) return false;
+	return true;
+}
+
+Mat_<uchar> fillRegion(Mat_<uchar> src, Mat_<uchar> mask) {
+	Mat_<uchar> dst(src.rows, src.cols);
+	Point p;
+
+	//compute p
+	bool found = false;
+	for (int i = 1; i < src.rows; i++) {
+		for (int j = 1; j < src.cols; j++) {
+			if (src(i, j) == 0 && src(i - 1, j) == 1 && src(i, j - 1) == 1)
+			{
+				p.x = i;
+				p.y = j;
+				found = true;
+			}
+			if (found) break;
+		}
+		if (found) break;
+	}
+
+	Mat_<uchar> Xprev(src.rows, src.cols);
+	Mat_<uchar> Xcurr(src.rows, src.cols);
+
+	for (int i = 1; i < src.rows; i++)
+		for (int j = 1; j < src.cols; j++) {
+			Xprev(i, j) = 0;
+			Xcurr(i, j) = 0;
+		}
+
+	Xcurr(p.x, p.y) = 1;
+	Mat_<uchar> AC = complement(src);
+
+	while (!areEqual(Xprev, Xcurr)) {
+		Xprev = Xcurr;
+		Xcurr = intersection(dilation(Xprev, mask), AC);
+	}
+
+	dst = reunion(src, Xcurr);
+	return dst;
+}
+
 void test() {
 	char fname[MAX_PATH];
 	while (openFileDlg(fname)) {
@@ -1647,6 +1731,53 @@ void test() {
 
 		imshow("original", src);
 		imshow("morph", dst);
+		waitKey(0);
+	}
+}
+
+void testRegionFilling() {
+	char fname[MAX_PATH];
+	while (openFileDlg(fname)) {
+		/*
+		Mat_<uchar> i1 = imread("D:\\UTC_an3_sem2\\PI\\Laborator\\lab07\\Morphological_Op_Images\\6_RegionFilling\\t1.bmp", IMREAD_GRAYSCALE);
+		Mat_<uchar> i2 = imread("D:\\UTC_an3_sem2\\PI\\Laborator\\lab07\\Morphological_Op_Images\\6_RegionFilling\\t2.bmp", IMREAD_GRAYSCALE);
+
+		i1 = grayScaleToI(i1);
+		i2 = grayScaleToI(i2);
+
+		Mat_<uchar> ss = reunion(i1, i2);
+		ss = ItoGrayScale(ss);
+
+		imshow("ss", ss);
+		waitKey(0);*/
+
+
+		Mat_<uchar> src = imread(fname, IMREAD_GRAYSCALE);
+		Mat_<uchar> I = grayScaleToI(src);
+		Mat_<uchar> dst(src.rows, src.cols);
+
+		Mat_<uchar> mask(3, 3);
+
+		for (int i = 0; i < 3; i++)
+			for (int j = 0; j < 3; j++)
+				mask(i, j) = 1;
+
+		/*
+		mask(0, 0) = 0;
+		mask(0, 1) = 1;
+		mask(0, 2) = 0;
+		mask(1, 0) = 1;
+		mask(1, 1) = 1;
+		mask(1, 2) = 1;
+		mask(2, 0) = 0;
+		mask(2, 1) = 1;
+		mask(2, 2) = 0;*/
+
+		dst = fillRegion(I, mask);
+		dst = ItoGrayScale(dst);
+
+		imshow("original", src);
+		imshow("fill", dst);
 		waitKey(0);
 	}
 }
@@ -1758,11 +1889,9 @@ Mat_<uchar> brightness(Mat_<uchar> img, int offset) {
 			if (tmp > 255) tmp = 255;
 			dst(i, j) = tmp;
 		}
-			
+
 	return dst;
 }
-
-//
 
 void testFeatures() {
 	char fname[MAX_PATH];
@@ -1830,6 +1959,123 @@ void testBrightness() {
 	}
 }
 
+Mat_<uchar> changeContrast(Mat_<uchar>src, int gOutMin, int gOutMax) {
+
+	if (gOutMin > gOutMax || gOutMin < 0 || gOutMin > 255 || gOutMax < 0 || gOutMax > 255) {
+		printf("\nERROR: inconsistent data for gOutMin or gOutMax \n");
+		exit(1);
+	}
+	Mat_<uchar> dst(src.rows, src.cols);
+
+	vector<int> histogram = computeHistogram(src);
+	int i = 0, gInMin, gInMax;
+
+	while (histogram[i] == 0)
+		i++;
+	gInMin = i;
+
+	i = 255;
+	while (histogram[i] == 0)
+		i--;
+	gInMax = i;
+
+	vector<int> LUT(256);
+
+	for (int g = 0; g < 256; g++)
+	{
+		LUT[g] = gOutMin + (g - gInMin) * ((gOutMax - gOutMin) / (gInMax - gInMin));
+	}
+
+	for (int i = 0; i < dst.rows; i++)
+	{
+		for (int j = 0; j < dst.cols; j++)
+		{
+			//dst(i, j) = LUT[src(i, j)];
+			dst(i, j) = gOutMin + (src(i, j) - gInMin) * ((gOutMax - gOutMin) / (gInMax - gInMin));
+			if (dst(i, j) < 0) {
+				dst(i, j) = 0;
+			}
+			if (dst.at<uchar>(i, j) > 255) {
+				dst(i, j) = 255;
+			}
+		}
+	}
+
+	return dst;
+}
+
+
+void testChangeContrast() {
+	char fname[MAX_PATH];
+	while (openFileDlg(fname)) {
+		Mat_<uchar> src = imread(fname, IMREAD_GRAYSCALE);
+		Mat_<uchar> dst(src.rows, src.cols);
+		imshow("original", src);
+		showHistogram("original H", computeHistogram(src).data(), 256, 256);
+
+		int gOutMin, gOutMax;
+		printf("gOutMin = ");
+		scanf("%d", &gOutMin);
+		printf("gOutMax = ");
+		scanf("%d", &gOutMax);
+
+		dst = changeContrast(src, gOutMin, gOutMax);
+
+		imshow("contrast", dst);
+		showHistogram("contrast H", computeHistogram(dst).data(), 256, 256);
+
+		waitKey(0);
+	}
+}
+
+
+Mat_<uchar> gamma(Mat_<uchar> src, float g) {
+
+	float L = 255;
+	Mat_<uchar> dst(src.rows, src.cols);
+
+	for (int i = 0; i < src.rows; i++) {
+		for (int j = 0; j < src.cols; j++) {
+			float gOut = L * pow((src(i, j) / L), g);
+
+			if (gOut < 0) {
+				gOut = 0;
+			}
+
+			if (gOut > L) {
+				gOut = L;
+			}
+			dst(i, j) = (int)gOut;
+		}
+	}
+
+	return dst;
+}
+
+
+void testGamma() {
+	char fname[MAX_PATH];
+	while (openFileDlg(fname)) {
+		Mat_<uchar> src = imread(fname, IMREAD_GRAYSCALE);
+		Mat_<uchar> dst(src.rows, src.cols);
+		imshow("original", src);
+		showHistogram("original H", computeHistogram(src).data(), 256, 256);
+
+		float g;
+		printf("gamma = ");
+		scanf("%f", &g);
+
+		dst = gamma(src, g);
+
+		imshow("gamma", dst);
+		showHistogram("gamma H", computeHistogram(dst).data(), 256, 256);
+
+		waitKey(0);
+	}
+}
+
+
+
 int main()
 {
 	int op;
@@ -1873,12 +2119,15 @@ int main()
 		printf(" 60 - Lab 6: contour tracking \n");
 		printf(" 61 - Lab 6: reconstruct image \n\n");
 
-		printf(" 70 - Lab 7:  dilation/erosion \n\n");
+		printf(" 70 - Lab 7:  dilation/erosion \n");
+		printf(" 71 - Lab 7:  fill region \n\n");
 
 		printf(" 80 - Lab 8:  mean, standard deviation, histogram and cumulative histogram\n");
 		printf(" 81 - Lab 8:  automatic binarization\n");
 		printf(" 82 - Lab 8:  test negative \n");
 		printf(" 83 - Lab 8:  test brightness \n");
+		printf(" 84 - Lab 8:  test change contrast \n");
+		printf(" 85 - Lab 8:  test gamma correction \n");
 
 		printf("\n 0 - Exit\n\n");
 		printf("Option: ");
@@ -1980,6 +2229,9 @@ int main()
 		case 70:
 			test();
 			break;
+		case 71:
+			testRegionFilling();
+			break;
 
 		case 80:
 			testFeatures();
@@ -1993,7 +2245,12 @@ int main()
 		case 83:
 			testBrightness();
 			break;
-
+		case 84:
+			testChangeContrast();
+			break;
+		case 85:
+			testGamma();
+			break;
 		}
 	} while (op != 0);
 	return 0;
